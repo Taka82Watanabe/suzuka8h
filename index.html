@@ -638,19 +638,30 @@ async function tryRestoreFile() {
     }
 }
 
+// ── Web モード：schedule.json を取得して反映 ──
+async function fetchScheduleJson() {
+    try {
+        const res = await fetch('./schedule.json', { cache: 'no-cache' });
+        if (!res.ok) return;
+        const parsed = await res.json();
+        const prevTab = state.activeTab;
+        state = parsed;
+        if (prevTab && state.tabs?.some(t => t.id === prevTab)) {
+            state.activeTab = prevTab;
+        } else if (state.tabs?.length) {
+            state.activeTab = state.tabs[0].id;
+        }
+        render();
+    } catch (e) {}
+}
+
 // ── 起動処理 ──
 async function initFile() {
     if (IS_WEB) {
-        try {
-            const res = await fetch('./schedule.json');
-            if (res.ok) {
-                const parsed = await res.json();
-                state = parsed;
-                if (!state.activeTab && state.tabs?.length) state.activeTab = state.tabs[0].id;
-            }
-        } catch (e) {}
+        await fetchScheduleJson();
         document.getElementById('fileBar').style.display = 'none';
         render();
+        setInterval(fetchScheduleJson, 60000);
         return;
     }
 
