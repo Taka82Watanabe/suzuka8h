@@ -536,6 +536,7 @@ async function idbDel(key) {
 // ══════════════════════════════════════════════════════
 const HAS_API = 'showOpenFilePicker' in window;
 const IDB_KEY = 'dataFile';
+const IS_WEB  = location.protocol === 'https:' || location.protocol === 'http:';
 const JSON_TYPES = [{ description: 'JSONファイル', accept: { 'application/json': ['.json'] } }];
 
 let fileHandle   = null;
@@ -639,6 +640,20 @@ async function tryRestoreFile() {
 
 // ── 起動処理 ──
 async function initFile() {
+    if (IS_WEB) {
+        try {
+            const res = await fetch('./schedule.json');
+            if (res.ok) {
+                const parsed = await res.json();
+                state = parsed;
+                if (!state.activeTab && state.tabs?.length) state.activeTab = state.tabs[0].id;
+            }
+        } catch (e) {}
+        document.getElementById('fileBar').style.display = 'none';
+        render();
+        return;
+    }
+
     if (!HAS_API) { setFileBar('no-api'); render(); return; }
 
     const status = await tryRestoreFile();
@@ -728,6 +743,7 @@ function showSaveToast() {
 //  状態変更 → ファイル保存のラッパー
 // ══════════════════════════════════════════════════════
 function commitChange() {
+    if (IS_WEB) return;
     if (fileHandle) {
         scheduleSave();
     } else {
@@ -783,19 +799,21 @@ function renderDateBar() {
     });
     wrap.appendChild(sel);
 
-    // ファイルボタンとの区切り
-    mkDivider();
+    if (!IS_WEB) {
+        // ファイルボタンとの区切り
+        mkDivider();
 
-    // 日程追加
-    mk('日程追加', '', openDateModal);
+        // 日程追加
+        mk('日程追加', '', openDateModal);
 
-    // 日程削除
-    mk('日程削除', '', () => deleteTab(state.activeTab));
+        // 日程削除
+        mk('日程削除', '', () => deleteTab(state.activeTab));
 
-    // スケジュール追加
-    const activeTab = state.tabs.find(t => t.id === state.activeTab);
-    if (activeTab) {
-        mk('スケジュール追加', '', () => addInlineSchedule(activeTab.id));
+        // スケジュール追加
+        const activeTab = state.tabs.find(t => t.id === state.activeTab);
+        if (activeTab) {
+            mk('スケジュール追加', '', () => addInlineSchedule(activeTab.id));
+        }
     }
 
     // 終了済み表示トグル
@@ -916,26 +934,29 @@ function buildCard(tab, sch) {
         cd.className = 'card-countdown';
         cd.id = 'cd-' + sch.id;
 
-        const actions = document.createElement('div');
-        actions.className = 'card-actions';
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'icon-btn';
-        editBtn.title = '編集';
-        editBtn.textContent = '✏️';
-        editBtn.addEventListener('click', () => startInlineEdit(tab.id, sch.id));
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'icon-btn del';
-        delBtn.title = '削除';
-        delBtn.textContent = '🗑️';
-        delBtn.addEventListener('click', () => deleteSchedule(tab.id, sch.id));
-
-        actions.appendChild(editBtn);
-        actions.appendChild(delBtn);
         card.appendChild(info);
         card.appendChild(cd);
-        card.appendChild(actions);
+
+        if (!IS_WEB) {
+            const actions = document.createElement('div');
+            actions.className = 'card-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'icon-btn';
+            editBtn.title = '編集';
+            editBtn.textContent = '✏️';
+            editBtn.addEventListener('click', () => startInlineEdit(tab.id, sch.id));
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'icon-btn del';
+            delBtn.title = '削除';
+            delBtn.textContent = '🗑️';
+            delBtn.addEventListener('click', () => deleteSchedule(tab.id, sch.id));
+
+            actions.appendChild(editBtn);
+            actions.appendChild(delBtn);
+            card.appendChild(actions);
+        }
     }
 
     return card;
