@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鈴鹿8耐 2026 タイムスケジュール</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', 'Hiragino Sans', 'Meiryo', sans-serif;
+            background: #111827;
+            color: #e5e7eb;
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        header {
+            background: linear-gradient(135deg, #b91c1c, #dc2626);
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+        }
+        header h1 { font-size: 1.4em; color: #fff; letter-spacing: 0.02em; }
+        #currentTime {
+            font-size: 2.5em;
+            color: rgba(255,255,255,0.95);
+            font-variant-numeric: tabular-nums;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.05em;
+        }
+
+        /* ── File bar（画面下部固定） ── */
+        .file-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 20px;
+            font-size: 0.82em;
+            flex-wrap: wrap;
+            min-height: 40px;
+            z-index: 100;
+            transition: background 0.3s;
+        }
+        .file-bar.no-api      { background: #450a0a; color: #fca5a5; }
+        .file-bar.no-folder   { background: #1c1917; color: #d97706; border-bottom: 1px solid #292524; }
+        .file-bar.needs-perm  { background: #1e3a5f; color: #93c5fd; }
+        .file-bar.connected   { background: #064e3b; color: #6ee7b7; }
+        .file-bar.error       { background: #450a0a; color: #fca5a5; }
+
+        #fileStatus { flex: 1; min-width: 0; }
+
+        .file-bar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .file-bar-btn {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: inherit;
+            padding: 4px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-family: inherit;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .file-bar-btn:hover { background: rgba(255,255,255,0.22); }
+
+        /* ── Save toast ── */
+        #saveToast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #064e3b;
+            color: #6ee7b7;
+            border: 1px solid #065f46;
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.25s, transform 0.25s;
+            pointer-events: none;
+            z-index: 300;
+        }
+        #saveToast.show { opacity: 1; transform: translateY(0); }
+
+        /* ── Tabs ── */
+.date-select {
+            background: rgba(0,0,0,0.25);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 1em;
+            font-family: inherit;
+            cursor: pointer;
+            min-width: 150px;
+        }
+        .date-select:focus { outline: none; border-color: rgba(255,255,255,0.7); }
+        .date-select option { background: #1f2937; color: #e5e7eb; }
+
+        /* ファイルバー内の追加ボタン群 */
+        .fb-divider { width: 1px; height: 18px; background: rgba(255,255,255,0.2); flex-shrink: 0; margin: 0 4px; }
+        .fb-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.22);
+            color: inherit;
+            padding: 4px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.88em;
+            font-family: inherit;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: background 0.15s;
+        }
+        .fb-btn:hover { background: rgba(255,255,255,0.2); }
+        .fb-btn.active { background: rgba(255,255,255,0.25); font-weight: 600; }
+        .fb-btn.primary { background: #dc2626; border-color: transparent; color: #fff; }
+        .fb-btn.primary:hover { background: #b91c1c; }
+
+        /* ── Content ── */
+        .content {
+            max-width: 90%;
+            margin: 0 auto;
+            padding: 16px 10px 0;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - var(--top-height, 120px) - var(--footer-height, 44px));
+        }
+        .tab-panel { display: none; flex-direction: column; flex: 1; min-height: 0; }
+        .tab-panel.active { display: flex; }
+
+        .cards-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: #374151 transparent;
+        }
+        .cards-scroll::-webkit-scrollbar { width: 6px; }
+        .cards-scroll::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+
+        /* ── Schedule cards ── */
+        .schedule-card {
+            background: #1f2937;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 14px;
+            border-left: 4px solid #34d399;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            transition: border-left-color 0.3s, background 0.3s, opacity 0.3s;
+        }
+        .schedule-card.running  { border-left-color: #dc2626; background: #2a1212; }
+        .schedule-card.finished { border-left-color: #374151; opacity: 0.55; }
+
+        .card-info {
+            flex: 1 1 220px;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .card-name {
+            font-size: 1.6em;
+            font-weight: 700;
+            color: #f3f4f6;
+            overflow-wrap: break-word;
+            word-break: break-all;
+            min-width: 0;
+        }
+        .card-sep { color: #374151; flex-shrink: 0; }
+        .card-time {
+            font-size: 2.1em;
+            font-weight: 600;
+            color: #d1d5db;
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.03em;
+        }
+
+        /* ── Countdown ── */
+        .card-countdown {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+        }
+        .cd-badge {
+            font-size: 0.82em;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+            background: rgba(52,211,153,0.15);
+            color: #34d399;
+            border: 1px solid rgba(52,211,153,0.35);
+        }
+        .cd-badge.running {
+            background: rgba(239,68,68,0.15);
+            color: #f87171;
+            border: 1px solid rgba(239,68,68,0.35);
+        }
+        .cd-badge.finished {
+            background: rgba(107,114,128,0.12);
+            color: #6b7280;
+            border: 1px solid rgba(107,114,128,0.25);
+        }
+        .cd-value {
+            font-family: 'Courier New', monospace;
+            font-size: 2.5em;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: #34d399;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+        }
+        .cd-value.running { color: #f87171; }
+
+        /* ── Card actions ── */
+        .card-actions { display: flex; flex-direction: column; gap: 6px; }
+        .icon-btn {
+            background: none;
+            border: none;
+            color: #4b5563;
+            cursor: pointer;
+            font-size: 1em;
+            padding: 4px 6px;
+            border-radius: 5px;
+            transition: color 0.15s, background 0.15s;
+            line-height: 1;
+        }
+        .icon-btn:hover     { color: #e5e7eb; background: rgba(255,255,255,0.07); }
+        .icon-btn.del:hover { color: #f87171; background: rgba(239,68,68,0.12); }
+
+        /* ── Card inline editing ── */
+        .schedule-card.editing { border-left-color: #6366f1; background: #1a1d2e; }
+        .card-edit-name {
+            flex: 1;
+            min-width: 80px;
+            background: #111827;
+            border: 1px solid #6366f1;
+            border-radius: 6px;
+            padding: 5px 10px;
+            color: #f3f4f6;
+            font-size: 1em;
+            font-family: inherit;
+            font-weight: 700;
+            outline: none;
+        }
+        .card-edit-time {
+            width: 90px;
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 6px;
+            padding: 5px 6px;
+            color: #9ca3af;
+            font-size: 0.85em;
+            font-family: inherit;
+            outline: none;
+            flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .card-edit-time:focus { border-color: #6366f1; color: #f3f4f6; }
+
+        /* ── Empty state ── */
+        .empty-state {
+            text-align: center;
+            color: #374151;
+            padding: 64px 0;
+            font-size: 1.05em;
+        }
+
+        /* ── Modal ── */
+        .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .overlay.open { display: flex; }
+        .modal-box {
+            background: #1f2937;
+            border-radius: 16px;
+            padding: 30px 28px;
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid #374151;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+        }
+        .modal-box h2 { font-size: 1.2em; color: #f3f4f6; margin-bottom: 22px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            font-size: 0.8em;
+            color: #9ca3af;
+            margin-bottom: 6px;
+            letter-spacing: 0.03em;
+        }
+        .form-group input {
+            width: 100%;
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 10px 13px;
+            color: #f3f4f6;
+            font-size: 1em;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus { border-color: #dc2626; }
+        .date-parts-row { display: flex; align-items: center; gap: 4px; }
+        .date-part {
+            width: 70px;
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 10px 10px;
+            color: #f3f4f6;
+            font-size: 1em;
+            font-family: inherit;
+            outline: none;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+        .date-part.date-part-sm { width: 48px; }
+        .date-part:focus { border-color: #dc2626; }
+        .date-sep { color: #9ca3af; font-size: 0.9em; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 24px; }
+        .btn-primary {
+            flex: 1;
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            padding: 11px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-family: inherit;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #b91c1c; }
+        .btn-secondary {
+            flex: 1;
+            background: #374151;
+            color: #9ca3af;
+            border: none;
+            padding: 11px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-family: inherit;
+            transition: background 0.2s, color 0.2s;
+        }
+        .btn-secondary:hover { background: #4b5563; color: #e5e7eb; }
+
+        @media (max-width: 600px) {
+            header h1 { font-size: 1.1em; }
+
+            .card-sep { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- パスワード画面 -->
+<div id="pwScreen" style="display:none; position:fixed; inset:0; background:#111827; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;">
+    <div style="font-size:1.6em; color:#f3f4f6; font-weight:700; letter-spacing:0.04em;">🏍 鈴鹿8耐 2026</div>
+    <div style="display:flex; gap:8px; align-items:center;">
+        <input id="pwInput" type="password" placeholder="パスワード"
+            style="background:#1f2937; border:1px solid #374151; border-radius:8px; padding:10px 16px; color:#f3f4f6; font-size:1.1em; font-family:inherit; outline:none; width:200px;">
+        <button id="pwBtn"
+            style="background:#dc2626; border:none; border-radius:8px; padding:10px 20px; color:#fff; font-size:1em; font-family:inherit; cursor:pointer;">入力</button>
+    </div>
+    <div id="pwError" style="color:#f87171; font-size:0.9em; min-height:1.2em;"></div>
+</div>
+
+<header>
+    <h1>🏍 鈴鹿8耐 2026 タイムスケジュール</h1>
+    <div id="dateSelectWrap"></div>
+    <div id="currentTime" style="margin-left:auto;"></div>
+</header>
+
+
+<div class="content" id="content"></div>
+
+<!-- 保存完了トースト -->
+<div id="saveToast">💾 保存しました</div>
+
+<!-- 日程タブ追加モーダル -->
+<div class="overlay" id="dateOverlay">
+    <div class="modal-box">
+        <h2>日程タブを追加</h2>
+        <div class="form-group">
+            <label>日付</label>
+            <div class="date-parts-row">
+                <input type="text" id="inputYear"  class="date-part" maxlength="4" inputmode="numeric" placeholder="2026">
+                <span class="date-sep">年</span>
+                <input type="text" id="inputMonth" class="date-part date-part-sm" maxlength="2" inputmode="numeric" placeholder="07">
+                <span class="date-sep">月</span>
+                <input type="text" id="inputDay"   class="date-part date-part-sm" maxlength="2" inputmode="numeric" placeholder="23">
+                <span class="date-sep">日</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>タブ名（省略可・自動生成）</label>
+            <input type="text" id="inputDateLabel" placeholder="例：7/24 (金)">
+        </div>
+        <div class="modal-buttons">
+            <button class="btn-secondary" id="cancelDateBtn">キャンセル</button>
+            <button class="btn-primary"   id="saveDateBtn">追加</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  パスワード認証
+// ══════════════════════════════════════════════════════
+(function () {
+    const PW = 's2026';
+    const screen = document.getElementById('pwScreen');
+    const input  = document.getElementById('pwInput');
+    const btn    = document.getElementById('pwBtn');
+    const errEl  = document.getElementById('pwError');
+
+    if (sessionStorage.getItem('auth') === '1') {
+        screen.style.display = 'none';
+        return;
+    }
+
+    screen.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => input.focus(), 50);
+
+    function attempt() {
+        if (input.value === PW) {
+            sessionStorage.setItem('auth', '1');
+            screen.style.display = 'none';
+            document.body.style.overflow = '';
+        } else {
+            errEl.textContent = 'パスワードが違います';
+            input.value = '';
+            input.focus();
+            setTimeout(() => { errEl.textContent = ''; }, 2000);
+        }
+    }
+
+    btn.addEventListener('click', attempt);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') attempt();
+    });
+})();
+
+// ══════════════════════════════════════════════════════
+//  定数・初期データ
+// ══════════════════════════════════════════════════════
+const DAY_NAMES = ['日','月','火','水','木','金','土'];
+
+const DEFAULT_TABS = [
+    { id: 'day1', date: '2026-07-23', label: '7/23 (木)', schedules: [] },
+    { id: 'day2', date: '2026-07-24', label: '7/24 (金)', schedules: [] },
+    { id: 'day3', date: '2026-07-25', label: '7/25 (土)', schedules: [] },
+    { id: 'day4', date: '2026-07-26', label: '7/26 (日)', schedules: [] },
+];
+
+let state = { activeTab: 'day1', tabs: JSON.parse(JSON.stringify(DEFAULT_TABS)) };
+let editingTabId = null;
+let editingScheduleId = null;
+
+// ══════════════════════════════════════════════════════
+//  IndexedDB — ファイルハンドルの永続化
+// ══════════════════════════════════════════════════════
+const IDB_NAME  = 'suzuka8tai_2026';
+const IDB_STORE = 'handles';
+
+function idbOpen() {
+    return new Promise((res, rej) => {
+        const r = indexedDB.open(IDB_NAME, 1);
+        r.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+        r.onsuccess = e => res(e.target.result);
+        r.onerror   = () => rej(r.error);
+    });
+}
+
+async function idbGet(key) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const r  = tx.objectStore(IDB_STORE).get(key);
+        r.onsuccess = () => res(r.result);
+        r.onerror   = () => rej(r.error);
+    });
+}
+
+async function idbPut(key, value) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(value, key);
+        tx.oncomplete = res;
+        tx.onerror    = () => rej(tx.error);
+    });
+}
+
+async function idbDel(key) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(key);
+        tx.oncomplete = res;
+        tx.onerror    = () => rej(tx.error);
+    });
+}
+
+// ══════════════════════════════════════════════════════
+//  File System Access API（ファイル直接選択方式）
+// ══════════════════════════════════════════════════════
+const HAS_API = 'showOpenFilePicker' in window;
+const IDB_KEY = 'dataFile';
+const JSON_TYPES = [{ description: 'JSONファイル', accept: { 'application/json': ['.json'] } }];
+
+let fileHandle   = null;
+let showFinished = false;
+
+// ── ファイルハンドルからデータを読み込む ──
+async function readFromFile(fh) {
+    try {
+        const file = await fh.getFile();
+        const text = (await file.text()).trim();
+        if (!text) return false;
+        const parsed = JSON.parse(text);
+        state = parsed;
+        if (!state.activeTab && state.tabs?.length) state.activeTab = state.tabs[0].id;
+        return true;
+    } catch (e) {
+        if (e.name === 'NotFoundError') return false;
+        throw e;
+    }
+}
+
+// ── ファイルハンドルへ書き込む ──
+async function saveToFile() {
+    if (!fileHandle) return;
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(state, null, 2));
+    await writable.close();
+    showSaveToast();
+}
+
+let saveTimer = null;
+function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => saveToFile().catch(() => setFileBar('error')), 200);
+}
+
+// ── 既存ファイルを開いて接続 ──
+async function selectFile() {
+    try {
+        const [fh] = await window.showOpenFilePicker({ types: JSON_TYPES, multiple: false });
+        fileHandle = fh;
+        await idbPut(IDB_KEY, fh);
+        const hasData = await readFromFile(fh);
+        if (!hasData) {
+            state = { activeTab: 'day1', tabs: JSON.parse(JSON.stringify(DEFAULT_TABS)) };
+            await saveToFile();
+        }
+        setFileBar('connected');
+        render();
+    } catch (e) {
+        if (e.name !== 'AbortError') setFileBar('error');
+    }
+}
+
+// ── 新規ファイルを作成して接続 ──
+async function createFile() {
+    try {
+        const fh = await window.showSaveFilePicker({ suggestedName: 'schedule.json', types: JSON_TYPES });
+        fileHandle = fh;
+        await idbPut(IDB_KEY, fh);
+        state = { activeTab: 'day1', tabs: JSON.parse(JSON.stringify(DEFAULT_TABS)) };
+        await saveToFile();
+        setFileBar('connected');
+        render();
+    } catch (e) {
+        if (e.name !== 'AbortError') setFileBar('error');
+    }
+}
+
+// ── 許可を再取得して再接続 ──
+async function reGrantPermission() {
+    try {
+        if (!fileHandle) { await selectFile(); return; }
+        const perm = await fileHandle.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') return;
+        const hasData = await readFromFile(fileHandle);
+        if (!hasData) {
+            state = { activeTab: 'day1', tabs: JSON.parse(JSON.stringify(DEFAULT_TABS)) };
+            await saveToFile();
+        }
+        setFileBar('connected');
+        render();
+    } catch (e) {
+        if (e.name !== 'AbortError') setFileBar('error');
+    }
+}
+
+// ── 起動時：IDB からファイルハンドルを復元 ──
+async function tryRestoreFile() {
+    try {
+        const fh = await idbGet(IDB_KEY);
+        if (!fh) return 'none';
+        const perm = await fh.queryPermission({ mode: 'readwrite' });
+        if (perm === 'granted') { fileHandle = fh; return 'ok'; }
+        fileHandle = fh;
+        return 'needs-perm';
+    } catch (_) {
+        return 'none';
+    }
+}
+
+// ── 起動処理 ──
+async function initFile() {
+    if (!HAS_API) { setFileBar('no-api'); render(); return; }
+
+    const status = await tryRestoreFile();
+
+    if (status === 'ok') {
+        try {
+            const hasData = await readFromFile(fileHandle);
+            if (!hasData) {
+                state = { activeTab: 'day1', tabs: JSON.parse(JSON.stringify(DEFAULT_TABS)) };
+                await saveToFile();
+            }
+            setFileBar('connected');
+        } catch (_) {
+            setFileBar('error');
+        }
+    } else if (status === 'needs-perm') {
+        state = { activeTab: 'day1', tabs: JSON.parse(JSON.stringify(DEFAULT_TABS)) };
+        setFileBar('needs-perm');
+    } else {
+        state = { activeTab: 'day1', tabs: JSON.parse(JSON.stringify(DEFAULT_TABS)) };
+        setFileBar('no-folder');
+    }
+
+    render();
+}
+
+// ══════════════════════════════════════════════════════
+//  ファイルバー UI
+// ══════════════════════════════════════════════════════
+function setFileBar(status) {
+    const bar      = document.getElementById('fileBar');
+    const statusEl  = document.getElementById('fileStatus');
+    const actionsEl = document.getElementById('fileActions');
+
+    bar.className = 'file-bar ' + status;
+    actionsEl.innerHTML = '';
+
+    const mkBtn = (label, fn) => {
+        const b = document.createElement('button');
+        b.className = 'file-bar-btn';
+        b.textContent = label;
+        b.addEventListener('click', fn);
+        actionsEl.appendChild(b);
+    };
+
+    const fileName = fileHandle ? fileHandle.name : '';
+
+    switch (status) {
+        case 'no-api':
+            statusEl.textContent = '⚠️ このブラウザは未対応です。Chrome または Edge をご使用ください。';
+            break;
+        case 'no-folder':
+            statusEl.textContent = '📄 保存先ファイルを選択してください';
+            mkBtn('📂 既存ファイルを開く', selectFile);
+            mkBtn('📄 新規ファイルを作成', createFile);
+            break;
+        case 'needs-perm':
+            statusEl.textContent = `🔒 「${fileName}」への接続許可が必要です`;
+            mkBtn('🔗 再接続する', reGrantPermission);
+            mkBtn('別のファイル', selectFile);
+            break;
+        case 'connected':
+            statusEl.textContent = `✅ 「${fileName}」に自動保存中`;
+            mkBtn('新規ファイル', createFile);
+            mkBtn('別のファイル', selectFile);
+            break;
+        case 'error':
+            statusEl.textContent = `❌ ファイルの読み書きに失敗しました`;
+            mkBtn('再試行', fileHandle ? reGrantPermission : selectFile);
+            mkBtn('別のファイル', selectFile);
+            break;
+    }
+}
+
+// ══════════════════════════════════════════════════════
+//  保存トースト
+// ══════════════════════════════════════════════════════
+let toastTimer = null;
+function showSaveToast() {
+    const el = document.getElementById('saveToast');
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 1500);
+}
+
+// ══════════════════════════════════════════════════════
+//  状態変更 → ファイル保存のラッパー
+// ══════════════════════════════════════════════════════
+function commitChange() {
+    if (fileHandle) {
+        scheduleSave();
+    } else {
+        selectFile();
+    }
+}
+
+// ══════════════════════════════════════════════════════
+//  Render
+// ══════════════════════════════════════════════════════
+function render() {
+    renderTabs();
+    renderPanels();
+    updateCountdowns();
+}
+
+function renderTabs() { renderDateBar(); }
+
+function renderDateBar() {
+    const extra = document.getElementById('fileBarExtra');
+    const wrap  = document.getElementById('dateSelectWrap');
+    extra.innerHTML = '';
+    wrap.innerHTML  = '';
+
+    const mk = (text, cls, fn) => {
+        const b = document.createElement('button');
+        b.className = 'fb-btn ' + cls;
+        b.textContent = text;
+        b.addEventListener('click', fn);
+        extra.appendChild(b);
+    };
+
+    const mkDivider = () => {
+        const d = document.createElement('div');
+        d.className = 'fb-divider';
+        extra.appendChild(d);
+    };
+
+    // ヘッダー内：日程コンボボックス
+    const sel = document.createElement('select');
+    sel.className = 'date-select';
+    state.tabs.forEach(tab => {
+        const opt = document.createElement('option');
+        opt.value = tab.id;
+        opt.textContent = tab.label;
+        opt.selected = tab.id === state.activeTab;
+        sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+        state.activeTab = sel.value;
+        commitChange();
+        render();
+    });
+    wrap.appendChild(sel);
+
+    // ファイルボタンとの区切り
+    mkDivider();
+
+    // 日程追加
+    mk('日程追加', '', openDateModal);
+
+    // 日程削除
+    mk('日程削除', '', () => deleteTab(state.activeTab));
+
+    // スケジュール追加
+    const activeTab = state.tabs.find(t => t.id === state.activeTab);
+    if (activeTab) {
+        mk('スケジュール追加', '', () => addInlineSchedule(activeTab.id));
+    }
+
+    // 終了済み表示トグル
+    mk('終了済みを表示', showFinished ? 'active' : '', () => {
+        showFinished = !showFinished;
+        renderDateBar();
+        updateCountdowns();
+    });
+}
+
+function renderPanels() {
+    const content = document.getElementById('content');
+    content.innerHTML = '';
+
+    const tab = state.tabs.find(t => t.id === state.activeTab);
+    if (!tab) return;
+
+    const panel = document.createElement('div');
+    panel.className = 'tab-panel active';
+
+    const scroll = document.createElement('div');
+    scroll.className = 'cards-scroll';
+
+    const toMin = t => { const [h, m] = (t || '00:00').split(':').map(Number); return h * 60 + m; };
+    const sorted = [...tab.schedules].sort((a, b) =>
+        toMin(a.startTime) - toMin(b.startTime) || toMin(a.endTime) - toMin(b.endTime)
+    );
+
+    if (sorted.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'スケジュールがまだありません。上のボタンから追加してください。';
+        scroll.appendChild(empty);
+    } else {
+        sorted.forEach(sch => scroll.appendChild(buildCard(tab, sch)));
+    }
+
+    panel.appendChild(scroll);
+    content.appendChild(panel);
+}
+
+function buildCard(tab, sch) {
+    const card = document.createElement('div');
+    card.id = 'card-' + sch.id;
+    const isEditing = (editingTabId === tab.id && editingScheduleId === sch.id);
+
+    if (isEditing) {
+        card.className = 'schedule-card editing';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'card-edit-name';
+        nameInput.value = sch.name;
+        nameInput.placeholder = 'スケジュール名';
+        nameInput.id = 'edit-name-' + sch.id;
+
+        const startInput = document.createElement('input');
+        startInput.type = 'time';
+        startInput.className = 'card-edit-time';
+        startInput.value = sch.startTime;
+        startInput.id = 'edit-start-' + sch.id;
+
+        const timeSep = document.createElement('span');
+        timeSep.className = 'card-sep';
+        timeSep.textContent = '～';
+
+        const endInput = document.createElement('input');
+        endInput.type = 'time';
+        endInput.className = 'card-edit-time';
+        endInput.value = sch.endTime;
+        endInput.id = 'edit-end-' + sch.id;
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'icon-btn';
+        saveBtn.title = '保存 (Enter)';
+        saveBtn.textContent = '✅';
+        saveBtn.addEventListener('click', () => saveInlineSchedule(tab.id, sch.id));
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'icon-btn del';
+        cancelBtn.title = 'キャンセル (Esc)';
+        cancelBtn.textContent = '✕';
+        cancelBtn.addEventListener('click', cancelInlineEdit);
+
+        actions.appendChild(saveBtn);
+        actions.appendChild(cancelBtn);
+        card.appendChild(nameInput);
+        card.appendChild(startInput);
+        card.appendChild(timeSep);
+        card.appendChild(endInput);
+        card.appendChild(actions);
+
+        setTimeout(() => nameInput.focus(), 30);
+        const fields = [nameInput, startInput, endInput];
+        fields.forEach((input, i) => {
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Escape') { cancelInlineEdit(); return; }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (i < fields.length - 1) fields[i + 1].focus();
+                    else saveInlineSchedule(tab.id, sch.id);
+                }
+            });
+        });
+    } else {
+        card.className = 'schedule-card';
+
+        const info = document.createElement('div');
+        info.className = 'card-info';
+        info.innerHTML = `<div class="card-time">${sch.startTime} ～ ${sch.endTime}</div>
+                          <span class="card-sep">｜</span>
+                          <div class="card-name">${escHtml(sch.name)}</div>`;
+
+        const cd = document.createElement('div');
+        cd.className = 'card-countdown';
+        cd.id = 'cd-' + sch.id;
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'icon-btn';
+        editBtn.title = '編集';
+        editBtn.textContent = '✏️';
+        editBtn.addEventListener('click', () => startInlineEdit(tab.id, sch.id));
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'icon-btn del';
+        delBtn.title = '削除';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', () => deleteSchedule(tab.id, sch.id));
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        card.appendChild(info);
+        card.appendChild(cd);
+        card.appendChild(actions);
+    }
+
+    return card;
+}
+
+// ══════════════════════════════════════════════════════
+//  カウントダウン更新（毎秒）
+// ══════════════════════════════════════════════════════
+function updateCountdowns() {
+    const now = new Date();
+    const normT = t => {
+        if (!t) return '00:00';
+        const [h, m] = t.split(':');
+        return `${String(+h).padStart(2,'0')}:${String(+(m||0)).padStart(2,'0')}`;
+    };
+
+    state.tabs.forEach(tab => {
+        if (!tab.date) return;
+        tab.schedules.forEach(sch => {
+            if (!sch.startTime || !sch.endTime) return;
+            const cdEl   = document.getElementById('cd-'   + sch.id);
+            const cardEl = document.getElementById('card-' + sch.id);
+            if (!cdEl) return;
+
+            const makeDt = (dateStr, timeStr) => {
+                const [y, mo, d]  = dateStr.split('-').map(Number);
+                const [h,  m]     = normT(timeStr).split(':').map(Number);
+                return new Date(y, mo - 1, d, h, m, 0);
+            };
+            const startDt = makeDt(tab.date, sch.startTime);
+            const endDt   = makeDt(tab.date, sch.endTime);
+            const toStart = Math.floor((startDt - now) / 1000);
+            const toEnd   = Math.floor((endDt   - now) / 1000);
+
+            if (toStart > 0) {
+                cdEl.innerHTML =
+                    `<div class="cd-badge">開始まで</div>
+                     <div class="cd-value" style="display:flex;align-items:center;gap:4px;">${fmtNoSec(toStart)}${secRingSVG(toStart % 60)}</div>`;
+                if (cardEl) { cardEl.className = 'schedule-card'; cardEl.style.display = ''; }
+            } else if (toEnd > 0) {
+                cdEl.innerHTML =
+                    `<div class="cd-badge running">終了まで</div>
+                     <div class="cd-value running">${fmtSeconds(toEnd)}</div>`;
+                if (cardEl) { cardEl.className = 'schedule-card running'; cardEl.style.display = ''; }
+            } else {
+                cdEl.innerHTML = `<div class="cd-badge finished">終了</div>`;
+                if (cardEl) {
+                    cardEl.className = 'schedule-card finished';
+                    cardEl.style.display = showFinished ? '' : 'none';
+                }
+            }
+        });
+    });
+}
+
+function fmtNoSec(total) {
+    if (total < 0) return '00:';
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    if (h > 0) return `${pad(h)}:${pad(m)}:`;
+    return `${pad(m)}:`;
+}
+
+function secRingSVG(seconds) {
+    const frac = Math.max(0, Math.min(1, seconds / 60));
+    const r = 13, cx = 16.5, cy = 16.5;
+    const circ = +(2 * Math.PI * r).toFixed(2);
+    const offset = +(circ * (1 - frac)).toFixed(2);
+    return `<svg width="33" height="33" viewBox="0 0 33 33" style="vertical-align:middle;flex-shrink:0">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(52,211,153,0.15)" stroke-width="2.5"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#34d399" stroke-width="2.5"
+            stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+    </svg>`;
+}
+
+
+function fmtSeconds(total) {
+    if (total < 0) return '00:00';
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    return `${pad(m)}:${pad(s)}`;
+}
+
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+// ══════════════════════════════════════════════════════
+//  現在時刻表示
+// ══════════════════════════════════════════════════════
+function updateClock() {
+    document.getElementById('currentTime').textContent =
+        new Date().toLocaleTimeString('ja-JP', {
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
+}
+
+// ══════════════════════════════════════════════════════
+//  インライン編集
+// ══════════════════════════════════════════════════════
+function addInlineSchedule(tabId) {
+    if (editingScheduleId) cancelInlineEdit();
+    const newId = 'new_' + Date.now();
+    const tab = state.tabs.find(t => t.id === tabId);
+    tab.schedules.push({ id: newId, name: '', startTime: '', endTime: '' });
+    editingTabId = tabId;
+    editingScheduleId = newId;
+    render();
+}
+
+function startInlineEdit(tabId, schId) {
+    if (editingScheduleId) cancelInlineEdit();
+    editingTabId = tabId;
+    editingScheduleId = schId;
+    render();
+}
+
+function cancelInlineEdit() {
+    if (editingScheduleId && editingScheduleId.startsWith('new_')) {
+        const tab = state.tabs.find(t => t.id === editingTabId);
+        if (tab) tab.schedules = tab.schedules.filter(s => s.id !== editingScheduleId);
+    }
+    editingTabId = null;
+    editingScheduleId = null;
+    render();
+}
+
+function saveInlineSchedule(tabId, schId) {
+    const nameEl  = document.getElementById('edit-name-'  + schId);
+    const startEl = document.getElementById('edit-start-' + schId);
+    const endEl   = document.getElementById('edit-end-'   + schId);
+    if (!nameEl) return;
+
+    const name  = nameEl.value.trim();
+    const start = startEl.value;
+    const end   = endEl.value;
+
+    if (!name)       { alert('スケジュール名を入力してください'); nameEl.focus(); return; }
+    if (!start)      { alert('開始時間を入力してください'); startEl.focus(); return; }
+    if (!end)        { alert('終了時間を入力してください'); endEl.focus(); return; }
+    const toMinVal = t => { const [h, m] = t.replace(/^(\d):/, '0$1:').split(':').map(Number); return h * 60 + m; };
+    if (toMinVal(start) >= toMinVal(end)){ alert('終了時間は開始時間より後にしてください'); endEl.focus(); return; }
+
+    const tab = state.tabs.find(t => t.id === tabId);
+    const sch = tab.schedules.find(s => s.id === schId);
+    if (schId.startsWith('new_')) sch.id = 'sch_' + Date.now();
+    sch.name = name;
+    sch.startTime = start;
+    sch.endTime = end;
+
+    editingTabId = null;
+    editingScheduleId = null;
+    commitChange();
+    render();
+}
+
+function deleteSchedule(tabId, schId) {
+    if (!confirm('このスケジュールを削除しますか？')) return;
+    const tab = state.tabs.find(t => t.id === tabId);
+    tab.schedules = tab.schedules.filter(s => s.id !== schId);
+    commitChange();
+    render();
+}
+
+// ══════════════════════════════════════════════════════
+//  日程タブ モーダル
+// ══════════════════════════════════════════════════════
+function openDateModal() {
+    document.getElementById('inputYear').value      = '';
+    document.getElementById('inputMonth').value     = '';
+    document.getElementById('inputDay').value       = '';
+    document.getElementById('inputDateLabel').value = '';
+    document.getElementById('dateOverlay').classList.add('open');
+    setTimeout(() => document.getElementById('inputYear').focus(), 50);
+}
+
+function closeDateModal() {
+    document.getElementById('dateOverlay').classList.remove('open');
+}
+
+function saveDate() {
+    const y = document.getElementById('inputYear').value.trim();
+    const mo = document.getElementById('inputMonth').value.trim().padStart(2, '0');
+    const d  = document.getElementById('inputDay').value.trim().padStart(2, '0');
+    if (!y || !mo || !d) { alert('年・月・日をすべて入力してください'); return; }
+    const date = `${y}-${mo}-${d}`;
+    const dateObj = new Date(+y, +mo - 1, +d);
+    if (isNaN(dateObj.getTime())) { alert('正しい日付を入力してください'); return; }
+
+    let label = document.getElementById('inputDateLabel').value.trim();
+    if (!label) {
+        label = `${+mo}/${+d} (${DAY_NAMES[dateObj.getDay()]})`;
+    }
+
+    const id = 'tab_' + Date.now();
+    state.tabs.push({ id, date, label, schedules: [] });
+    state.activeTab = id;
+    commitChange();
+    closeDateModal();
+    render();
+}
+
+function deleteTab(tabId) {
+    if (state.tabs.length === 1) { alert('最後のタブは削除できません'); return; }
+    const tab = state.tabs.find(t => t.id === tabId);
+    if (!confirm(`「${tab.label}」タブを削除しますか？\nこのタブのスケジュールもすべて削除されます。`)) return;
+    state.tabs = state.tabs.filter(t => t.id !== tabId);
+    if (state.activeTab === tabId) state.activeTab = state.tabs[0].id;
+    commitChange();
+    render();
+}
+
+// ══════════════════════════════════════════════════════
+//  ユーティリティ
+// ══════════════════════════════════════════════════════
+function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════════════
+//  イベントリスナー
+// ══════════════════════════════════════════════════════
+document.getElementById('cancelDateBtn').addEventListener('click', closeDateModal);
+document.getElementById('saveDateBtn').addEventListener('click', saveDate);
+
+document.getElementById('dateOverlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeDateModal();
+});
+// 年→月→日→タブ名：4桁/2桁入力で自動移動
+document.getElementById('inputYear').addEventListener('input', e => {
+    if (e.target.value.length === 4) document.getElementById('inputMonth').focus();
+});
+document.getElementById('inputMonth').addEventListener('input', e => {
+    if (e.target.value.length === 2) document.getElementById('inputDay').focus();
+});
+document.getElementById('inputDay').addEventListener('input', e => {
+    if (e.target.value.length === 2) document.getElementById('inputDateLabel').focus();
+});
+
+// Enter キーナビゲーション
+[
+    ['inputYear',      () => document.getElementById('inputMonth').focus()],
+    ['inputMonth',     () => document.getElementById('inputDay').focus()],
+    ['inputDay',       () => document.getElementById('inputDateLabel').focus()],
+    ['inputDateLabel', () => saveDate()],
+].forEach(([id, action]) => {
+    document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); action(); }
+        if (e.key === 'Escape') closeDateModal();
+    });
+});
+
+// ══════════════════════════════════════════════════════
+//  起動
+// ══════════════════════════════════════════════════════
+function updateTopHeight() {
+    const topH = (document.querySelector('header')?.offsetHeight  || 0)
+               + (document.getElementById('tabsBar')?.offsetHeight || 0);
+    const footerH = document.getElementById('fileBar')?.offsetHeight || 0;
+    document.documentElement.style.setProperty('--top-height',    topH    + 'px');
+    document.documentElement.style.setProperty('--footer-height', footerH + 'px');
+}
+
+initFile();
+updateClock();
+updateTopHeight();
+window.addEventListener('resize', updateTopHeight);
+setInterval(() => { updateClock(); updateCountdowns(); }, 1000);
+</script>
+
+<!-- ファイルバー（画面下部固定） -->
+<div class="file-bar disconnected" id="fileBar">
+    <span id="fileStatus">読み込み中...</span>
+    <div class="file-bar-actions" id="fileActions"></div>
+    <div id="fileBarExtra" style="display:flex;align-items:center;gap:6px;flex-shrink:0;"></div>
+</div>
+</body>
+</html>
