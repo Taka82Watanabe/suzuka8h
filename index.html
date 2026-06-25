@@ -661,7 +661,7 @@ async function initFile() {
         await fetchScheduleJson();
         document.getElementById('fileBar').style.display = 'none';
         render();
-        setInterval(fetchScheduleJson, 60000);
+        setInterval(fetchScheduleJson, 10000);
         return;
     }
 
@@ -939,7 +939,7 @@ function buildCard(tab, sch) {
         info.className = 'card-info';
         info.innerHTML = `<div class="card-time">${sch.startTime} ～ ${sch.endTime}</div>
                           <span class="card-sep">｜</span>
-                          <div class="card-name">${escHtml(sch.name)}</div>`;
+                          <div class="card-name" style="color:${teamColor(sch.name)}">${escHtml(sch.name)}</div>`;
 
         const cd = document.createElement('div');
         cd.className = 'card-countdown';
@@ -1185,6 +1185,13 @@ function deleteTab(tabId) {
 // ══════════════════════════════════════════════════════
 //  ユーティリティ
 // ══════════════════════════════════════════════════════
+function teamColor(name) {
+    if (name.includes('イエロー')) return '#facc15';
+    if (name.includes('ブルー'))   return '#60a5fa';
+    if (name.includes('レッド'))   return '#f87171';
+    return '#f3f4f6';
+}
+
 function escHtml(str) {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
